@@ -15,7 +15,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install test tools
         run: |
           Install-Module -Name Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -ErrorAction Stop
