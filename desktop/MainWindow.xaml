@@ -1,0 +1,96 @@
+<Window x:Class="SysHealth.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SysHealth · Print diagnostics" Width="660" Height="660" MinWidth="320" MinHeight="280"
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        FontFamily="Segoe UI" FontSize="15">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="14,7" />
+      <Setter Property="MinHeight" Value="44" />
+      <Setter Property="Margin" Value="0,0,10,8" />
+    </Style>
+    <Style x:Key="Body" TargetType="TextBlock">
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="SectionLabel" TargetType="TextBlock" BasedOn="{StaticResource Body}">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
+    </Style>
+  </Window.Resources>
+
+  <ScrollViewer x:Name="ContentScroll" VerticalScrollBarVisibility="Auto"
+                HorizontalScrollBarVisibility="Disabled" IsTabStop="False">
+    <StackPanel Margin="20" MaxWidth="720">
+      <TextBlock Text="Print diagnostics" FontSize="30" FontWeight="SemiBold"
+                 Style="{StaticResource Body}" AutomationProperties.HeadingLevel="Level1" />
+      <TextBlock Text="SysHealth checks this computer without changing printer settings."
+                 Style="{StaticResource Body}" Margin="0,4,0,16" />
+
+      <Border Padding="14" CornerRadius="8" BorderThickness="1"
+              Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+              BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+              TextElement.Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}">
+        <StackPanel>
+          <TextBlock x:Name="Headline" Text="Checking this computer…" FontSize="22"
+                     Style="{StaticResource SectionLabel}" AutomationProperties.LiveSetting="Polite" />
+          <TextBlock x:Name="NextLabel" Text="Next step" Style="{StaticResource SectionLabel}"
+                     Margin="0,10,0,0" Visibility="Collapsed" />
+          <TextBlock x:Name="NextStep" Text="Reading the print service and the last 24 hours of print events."
+                     Style="{StaticResource Body}" Margin="0,3,0,0" />
+          <ProgressBar x:Name="Progress" AutomationProperties.Name="Checking this computer"
+                       IsIndeterminate="True" Height="6" Margin="0,12,0,0" Focusable="False" />
+        </StackPanel>
+      </Border>
+
+      <StackPanel x:Name="Findings" Visibility="Collapsed" Margin="0,14,0,0">
+        <TextBlock Text="What was checked" Style="{StaticResource SectionLabel}" />
+        <TextBlock x:Name="CoverageText" Style="{StaticResource Body}" Margin="0,4,0,0" />
+        <TextBlock x:Name="ServiceText" Style="{StaticResource Body}" Margin="0,3,0,0" />
+        <TextBlock x:Name="EventText" Style="{StaticResource Body}" Margin="0,3,0,0" />
+        <TextBlock x:Name="CheckedText" Style="{StaticResource Body}" Margin="0,3,0,0" />
+      </StackPanel>
+
+      <WrapPanel Margin="0,14,0,0">
+        <Button x:Name="ScanButton" Content="_Check again" Click="ScanClicked" IsEnabled="False" />
+        <Button x:Name="CopyButton" Content="C_opy summary" Click="CopyClicked" IsEnabled="False" />
+      </WrapPanel>
+      <TextBlock x:Name="Feedback" Style="{StaticResource Body}" AutomationProperties.LiveSetting="Polite" />
+
+      <Expander x:Name="Details" IsEnabled="False" Margin="0,10,0,0" Padding="0,8">
+        <Expander.Header><AccessText Text="_Technical details" /></Expander.Header>
+        <StackPanel>
+          <TextBlock x:Name="LogText" Style="{StaticResource Body}" Margin="0,0,0,8" />
+          <Button Content="_Export JSON…" Click="ExportClicked" HorizontalAlignment="Left" />
+          <TextBlock x:Name="ExportFeedback" Style="{StaticResource Body}" AutomationProperties.LiveSetting="Polite" />
+          <TextBlock x:Name="GroupHeading" Text="Events grouped by provider and ID"
+                     Style="{StaticResource SectionLabel}" Margin="0,8,0,0" />
+          <ItemsControl x:Name="EventList" AutomationProperties.Name="Print event groups">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Margin="0,6,0,0" Padding="8" BorderThickness="1"
+                        BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}">
+                  <StackPanel>
+                    <TextBlock Style="{StaticResource Body}" FontWeight="SemiBold">
+                      <Run Text="Event ID " /><Run Text="{Binding EventId, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock Text="{Binding Provider}" Style="{StaticResource Body}" />
+                    <TextBlock Style="{StaticResource Body}">
+                      <Run Text="Count: " /><Run Text="{Binding Count, Mode=OneWay}" />
+                      <Run Text=" · Last seen: " /><Run Text="{Binding LastSeenLocal, Mode=OneWay}" />
+                    </TextBlock>
+                    <ProgressBar Height="4" Margin="0,4,0,0" Value="{Binding Count, Mode=OneWay}"
+                                 Maximum="{Binding Tag, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                 Focusable="False" AutomationProperties.Name="Relative event frequency" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Expander>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

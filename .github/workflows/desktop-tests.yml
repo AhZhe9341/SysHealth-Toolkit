@@ -1,0 +1,113 @@
+name: Windows desktop tests
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run desktop regression checks
+        run: dotnet run --project desktop/tests/SysHealth.Tests.csproj -c Release
+      - name: Publish Windows x64 executable
+        run: >
+          dotnet publish desktop/SysHealth.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true -p:DebugType=None
+          -p:TreatWarningsAsErrors=true -o desktop/publish
+      - name: Smoke test Windows print diagnostics
+        shell: powershell
+        timeout-minutes: 5
+        run: |
+          Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+          $elementType = [System.Windows.Automation.AutomationElement]
+          $scope = [System.Windows.Automation.TreeScope]::Descendants
+          $channel = 'Microsoft-Windows-PrintService/Admin'
+          $files = @(Get-ChildItem desktop/publish -File)
+          if ($files.Count -ne 1 -or $files[0].Name -ne 'SysHealth.exe') {
+            throw 'Expected exactly one published file named SysHealth.exe.'
+          }
+
+          function Assert-Scan($scenario, $expectedService, $expectedEvents, $expectedCoverage) {
+            $app = Start-Process -FilePath $files[0].FullName -PassThru
+            try {
+              $clock = [Diagnostics.Stopwatch]::StartNew()
+              $findings = @{}
+              $ids = 'ServiceText', 'EventText', 'CoverageText'
+              while ($clock.Elapsed.TotalSeconds -lt 35) {
+                $app.Refresh()
+                if ($app.HasExited) {
+                  throw "SysHealth exited before showing diagnostics (exit $($app.ExitCode))."
+                }
+                if ($app.MainWindowHandle -ne [IntPtr]::Zero) {
+                  $window = $elementType::FromHandle($app.MainWindowHandle)
+                  foreach ($id in $ids) {
+                    $condition = [System.Windows.Automation.PropertyCondition]::new($elementType::AutomationIdProperty, $id)
+                    $item = $window.FindFirst($scope, $condition)
+                    $findings[$id] = if ($null -ne $item) { $item.Current.Name } else { '' }
+                  }
+                  if ($findings.ServiceText -and $findings.EventText -and $findings.CoverageText) { break }
+                }
+                Start-Sleep -Milliseconds 250
+              }
+              if ($findings.ServiceText -ne $expectedService -or
+                  $findings.EventText -notmatch $expectedEvents -or
+                  $findings.CoverageText -ne $expectedCoverage) {
+                throw "${scenario}: unexpected findings: $($findings.ServiceText); $($findings.EventText); $($findings.CoverageText)"
+              }
+              Write-Output "PASS ${scenario}: $($findings.ServiceText); $($findings.EventText); $($findings.CoverageText)"
+            }
+            finally {
+              if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }
+              $app.Dispose()
+            }
+          }
+
+          function Set-PrintLog([bool]$enabled) {
+            $flag = '/e:' + $enabled.ToString().ToLowerInvariant()
+            & wevtutil.exe sl $channel $flag
+            if ($LASTEXITCODE -ne 0) { throw "Unable to set PrintService Admin logging to $enabled." }
+            if ((Get-WinEvent -ListLog $channel).IsEnabled -ne $enabled) {
+              throw 'The event log setting did not change as expected.'
+            }
+          }
+
+          $initialService = (Get-Service Spooler).Status
+          $initialLog = (Get-WinEvent -ListLog $channel).IsEnabled
+          $readable = '^Print events: (No matching events|[0-9]+ sampled)'
+          try {
+            if ($initialService -ne 'Running') { Start-Service Spooler }
+            if (!$initialLog) { Set-PrintLog $true }
+            Assert-Scan 'Running with readable log' 'Print service: Running' $readable '2 of 2 checks completed'
+
+            Stop-Service Spooler
+            (Get-Service Spooler).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(15))
+            Assert-Scan 'Stopped Spooler' 'Print service: Stopped' $readable '2 of 2 checks completed'
+
+            Start-Service Spooler
+            (Get-Service Spooler).WaitForStatus('Running', [TimeSpan]::FromSeconds(15))
+            Set-PrintLog $false
+            Assert-Scan 'Disabled event log' 'Print service: Running' '^Print events: Logging is turned off$' '1 of 2 checks completed'
+          }
+          finally {
+            try {
+              if ((Get-WinEvent -ListLog $channel).IsEnabled -ne $initialLog) { Set-PrintLog $initialLog }
+            }
+            finally {
+              if ($initialService -eq 'Running') { Start-Service Spooler }
+              elseif ($initialService -eq 'Stopped') { Stop-Service Spooler }
+            }
+          }
