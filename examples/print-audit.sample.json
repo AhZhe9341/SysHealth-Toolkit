@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "collectedAtUtc": "2026-01-01T09:00:00.0000000Z",
+  "sinceUtc": "2025-12-31T09:00:00.0000000Z",
+  "check": "print",
+  "status": "complete",
+  "spooler": {
+    "status": "ok",
+    "name": "Spooler",
+    "state": "Running",
+    "errorCode": null
+  },
+  "events": {
+    "status": "ok",
+    "log": "Microsoft-Windows-PrintService/Admin",
+    "sampledEvents": 2,
+    "maxEvents": 200,
+    "truncated": false,
+    "groups": [
+      {
+        "provider": "Microsoft-Windows-PrintService",
+        "eventId": 372,
+        "count": 2,
+        "lastSeenUtc": "2026-01-01T08:42:00.0000000Z"
+      }
+    ],
+    "errorCode": null
+  }
+}
