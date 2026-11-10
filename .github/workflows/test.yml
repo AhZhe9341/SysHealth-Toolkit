@@ -19,10 +19,11 @@ jobs:
       - name: Install test tools
         run: |
           Install-Module -Name Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -ErrorAction Stop
-          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force -ErrorAction Stop
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -ErrorAction Stop
       - name: Analyze PowerShell scripts
+        timeout-minutes: 3
         run: |
-          Import-Module PSScriptAnalyzer -RequiredVersion 1.24.0
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
           $issues = @(Invoke-ScriptAnalyzer -Path . -Recurse)
           if ($issues.Count) {
             $issues | Format-Table -AutoSize
