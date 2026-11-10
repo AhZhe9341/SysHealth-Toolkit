@@ -1,0 +1,76 @@
+name: Windows desktop tests
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run desktop regression checks
+        run: dotnet run --project desktop/tests/SysHealth.Tests.csproj -c Release
+      - name: Publish Windows x64 executable
+        run: >
+          dotnet publish desktop/SysHealth.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true -p:DebugType=None
+          -p:TreatWarningsAsErrors=true -o desktop/publish
+      - name: Smoke test automatic scan on Windows
+        shell: powershell
+        timeout-minutes: 3
+        run: |
+          Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+          $elementType = [System.Windows.Automation.AutomationElement]
+          $scope = [System.Windows.Automation.TreeScope]::Descendants
+          $service = Get-Service -Name Spooler -ErrorAction Stop
+          $expected = "Print service: $($service.Status)"
+          $files = @(Get-ChildItem desktop/publish -File)
+          if ($files.Count -ne 1 -or $files[0].Name -ne 'SysHealth.exe') {
+            throw 'Expected exactly one published file named SysHealth.exe.'
+          }
+          $app = Start-Process -FilePath $files[0].FullName -PassThru
+          try {
+            $clock = [Diagnostics.Stopwatch]::StartNew()
+            $serviceText = $null
+            $eventText = $null
+            while ($clock.Elapsed.TotalSeconds -lt 75) {
+              $app.Refresh()
+              if ($app.HasExited) {
+                throw "SysHealth exited before showing diagnostics (exit $($app.ExitCode))."
+              }
+              if ($app.MainWindowHandle -ne [IntPtr]::Zero) {
+                $window = $elementType::FromHandle($app.MainWindowHandle)
+                $serviceId = [System.Windows.Automation.PropertyCondition]::new($elementType::AutomationIdProperty, 'ServiceText')
+                $eventId = [System.Windows.Automation.PropertyCondition]::new($elementType::AutomationIdProperty, 'EventText')
+                $serviceText = $window.FindFirst($scope, $serviceId)
+                $eventText = $window.FindFirst($scope, $eventId)
+                if ($null -ne $serviceText -and $null -ne $eventText -and
+                    $serviceText.Current.Name -and $eventText.Current.Name) {
+                  break
+                }
+              }
+              Start-Sleep -Milliseconds 300
+            }
+            if ($null -eq $serviceText -or $null -eq $eventText -or
+                $serviceText.Current.Name -ne $expected -or $eventText.Current.Name -notlike 'Print events: *') {
+              throw "Automatic scan did not show the expected Windows service and event-log findings. Expected: $expected"
+            }
+            Write-Output "Automatic scan verified: $($serviceText.Current.Name); $($eventText.Current.Name)"
+          }
+          finally {
+            if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }
+            $app.Dispose()
+          }
